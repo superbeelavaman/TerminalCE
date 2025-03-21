@@ -6,8 +6,8 @@ on Linux systems running systemd, run
     to start a terminal through the emulated serial port on the calc.
 
 ## Planned features
-40 column terminal (hopefully)  
-30 rows, top 2 and bottom 2 rows being used for status bars with black on white text  
+40 column terminal (display output functional, no keyboard yet)
+30 rows, top 2 and bottom 2 rows being used for status bars with black on white text (done, lacking statusbar content)
   
 example UI:
 ```
