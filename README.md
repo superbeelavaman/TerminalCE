@@ -1,6 +1,6 @@
 # TerminalCE
-Serial console for the TI 84 Plus CE
-When running, sets USB port be seen as a USB-Serial adapter by a host device.
+Serial console for the TI 84 Plus CE  
+When running, sets USB port be seen as a USB-Serial adapter by a host device.  
 on Linux systems running systemd, run  
     `# systemctl start serial-getty@ttyUSB0.service`  
     to start a terminal through the emulated serial port on the calc.
@@ -30,6 +30,7 @@ RRRBBGGG Hex Name
 ```
 Keyboard: (not implemented yet)  
 (top: key label, left: shift state)  
+(bottom: I forgot, if I don't figure it out I'll edit this to remove that row  -Superbee)
 
 |    | f1    | f2    | f3    | f4    | f5    |
 |----|-------|-------|-------|-------|-------|
