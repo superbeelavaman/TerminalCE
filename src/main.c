@@ -96,7 +96,7 @@ uint8_t keyboardState = 0x00;
 
 bool newTiles = true;
 
-char keyactions[256] = {
+const char* keyactions[1024] = {
     0,    0,    0,    0,    0,    0,    0,    0,
     0,    0,    0,    0,    0,    0xFD, 0,    0,
     0,    0,    0,    0,    0,    0,    0,    0xFE,
@@ -193,7 +193,7 @@ bool step() {
         } else if(bytes_read > 0) {
             idx = 0;
             char symbol;
-            char escape_code[16]
+            char escape_code[16];
             while (idx < bytes_read) {
                 symbol = in_buf[idx];
                 int increment_X = 1;
@@ -212,7 +212,7 @@ bool step() {
                 if (symbol == 0x05) {
                     srl_Write(&srl, "TerminalCE", 10);
                     increment_X = 0;
-                    symbol = 0x20
+                    symbol = 0x20;
                 }
                 if (cursorX >= 40) {
                     cursorX = 0;
@@ -231,7 +231,7 @@ bool step() {
         kb_Scan();
         idx8 = 0;
         idx  = 0;
-        char send[1];
+        char send[1] = { 0 };
         uint8_t keys = 0;
         while (idx < 8) {
             keys = kb_Data[idx];
@@ -239,16 +239,17 @@ bool step() {
                 while (idx8 < 8) {
                     if (keys & 0x01) {
                         if (keyboardState > 3) { keyboardState = 0 ; }
-                        send[1] = keyactions[(64*keyboardState)+(8*idx)+idx8];
+                        send[0] = keyactions[(256*keyboardState)+(8*idx)+idx8];
                     }
-                    keys = (keys >> 1)
+                    keys = (keys >> 1);
                     idx8 += 1;
                 }
             }
             idx += 1;
         }
-
-        srl_Write(&srl, send, 1);
+	if (send[0] != 0) {
+        	srl_Write(&srl, send, 1);
+	}
     }
     return !kb_On;
 }

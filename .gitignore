@@ -6,6 +6,7 @@
 *.ko
 *.obj
 *.elf
+*.src
 
 # Linker output
 *.ilk
@@ -21,6 +22,8 @@
 *.a
 *.la
 *.lo
+*.8xv
+*.8xg
 
 # Shared objects (inc. Windows DLLs)
 *.dll
@@ -35,6 +38,7 @@
 *.i*86
 *.x86_64
 *.hex
+*.8xp
 
 # Debug files
 *.dSYM/
