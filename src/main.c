@@ -96,43 +96,7 @@ uint8_t keyboardState = 0x00;
 
 bool newTiles = true;
 
-const char* keyactions[1024] = {
-    0,    0,    0,    0,    0,    0,    0,    0,
-    0,    0,    0,    0,    0,    0xFD, 0,    0,
-    0,    0,    0,    0,    0,    0,    0,    0xFE,
-    " ",  0,    0,    0,    0,    0,    0,    0, 
-    ";",  0,    0,    0,    0,    0,    0,    0,
-    "?",  0,    0,    0,    0,    0,    0,    0,
-    0x0D, 0,    0,    0,    0,    0,    0,    0,
-    0,    0,    0,    0,    0,    0,    0,    0, 
-   
-    0,    0,    0,    0,    0,    0,    0,    0,
-    0,    0,    0,    0,    0,    0xFC, 0,    0,
-    0,    0,    0,    0,    0,    0,    0,    0xFE,
-    " ",  0,    0,    0,    0,    0,    0,    0, 
-    ":",  0,    0,    0,    0,    0,    0,    0,
-    "!",  0,    0,    0,    0,    0,    0,    0,
-    0x0D, 0,    0,    0,    0,    0,    0,    0,
-    0,    0,    0,    0,    0,    0,    0,    0, 
-
-    0,    0,    0,    0,    0,    0,    0,    0,
-    0,    0,    0,    0,    0,    0xFF, 0,    0,
-    0,    0,    0,    0,    0,    0,    0,    0xFC,
-    "0",  "1",  "4",  "7",  ",",  0,    0,    0, 
-    ".",  "2",  "5",  "8",  "(",  0,    0,    0,
-    0,    "3",  "6",  "9",  ")",  0,    0,    0,
-    0x0D, "+",  "-",  "*",  "/",  "^",  0,    0,
-    0,    0,    0,    0,    0,    0,    0,    0, 
-    
-    0,    0,    0,    0,    0,    0,    0,    0,
-    0,    0,    0,    0,    0,    0xFE, 0x03, 0x16,
-    0,    0,    0,    0,    0,    0,    0,    0xFC,
-    "~",  0,    0,    0,    0,    0,    0,    0, 
-    "<",  0,    0,    0,    0,    0,    0,    0,
-    ">",  0,    0,    0,    0,    0,    0,    0,
-    0x0D, 0,    0,    0,    0,    0,    0,    0,
-    0,    0,    0,    0,    0,    0,    0,    0, 
-};
+const char* keyactions[1024];
 
 int begin() {
     kb_EnableOnLatch();
@@ -194,6 +158,7 @@ bool step() {
             idx = 0;
             char symbol;
             char escape_code[16];
+            bool bs = false;
             while (idx < bytes_read) {
                 symbol = in_buf[idx];
                 int increment_X = 1;
@@ -214,6 +179,13 @@ bool step() {
                     increment_X = 0;
                     symbol = 0x20;
                 }
+                if (symbol == 0x08) {
+                    if (cursorX != 0) {
+                        cursorX -= 1;
+                    }
+                    symbol = 0x20;
+                    bs = true;
+                }
                 if (cursorX >= 40) {
                     cursorX = 0;
                     cursorY += 1;
@@ -223,7 +195,9 @@ bool step() {
                     cursorY = 25;
                 }
                 renderGoal[((40 * (cursorY+2)) + cursorX)] = (256*symbol+0xF0);
-                cursorX += increment_X;
+                if (!bs) {
+                    cursorX += increment_X;
+                }
                 idx += 1;
             }
             newTiles = true;
