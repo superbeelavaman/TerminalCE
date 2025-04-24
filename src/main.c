@@ -8,7 +8,7 @@
 */
 
 #include <srldrvce.h>
-#include <graphx.h>
+#include <sys/lcd.h>
 #include <debug.h>
 #include <keypadc.h>
 #include <stdbool.h>
@@ -22,6 +22,8 @@ srl_device_t srl;
 bool has_srl_device = false;
 
 uint8_t srl_buf[512];
+
+long* vram = (long*)lcd_Ram;
 
 static usb_error_t handle_usb_event(usb_event_t event, void *event_data,
                                     usb_callback_data_t *callback_data __attribute__((unused))) {
@@ -87,16 +89,18 @@ uint8_t cursorY = 0;
 bool canUseFont = false;
 uint8_t idx8 = 0;
 
-uint8_t colour_red   = 0xA0;
-uint8_t colour_green = 0x05;
-uint8_t colour_blue  = 0x10;
-uint8_t colour_gray  = 0x4A;
+uint8_t colour_red   = 0b0001;
+uint8_t colour_green = 0b0010;
+uint8_t colour_blue  = 0b0100;
+uint8_t colour_gray  = 0b1000;
 
 uint8_t keyboardState = 0x00;
 
 bool newTiles = true;
 
 const char* keyactions[1024];
+
+long lcdregisters;
 
 int begin() {
     kb_EnableOnLatch();
@@ -109,6 +113,29 @@ int begin() {
         canUseFont = true;
         ti_Read(fontBytes, 1, 2048, fontData);
     }
+    lcdregisters = lcd_Control; // Save LCD Register
+    lcd_Control = ((lcdregisters & 0xFFF1) | 0b0100); //Set 4bpp Mode
+
+    lcd_Palette[ 0] = 0b0000000000000000; //Set LCD Palette
+    lcd_Palette[ 1] = 0b0101010000000000;
+    lcd_Palette[ 2] = 0b0000001010100000;
+    lcd_Palette[ 3] = 0b0101011010100000;
+    lcd_Palette[ 4] = 0b0000000000010101;
+    lcd_Palette[ 5] = 0b0101010000010101;
+    lcd_Palette[ 6] = 0b0000001010110101;
+    lcd_Palette[ 7] = 0b0101011010110101;
+    lcd_Palette[ 8] = 0b1010100101001010;
+    lcd_Palette[ 9] = 0b1111110101001010;
+    lcd_Palette[10] = 0b1010101111101010;
+    lcd_Palette[11] = 0b1111111111101010;
+    lcd_Palette[12] = 0b1010100101011111;
+    lcd_Palette[13] = 0b1111110101011111;
+    lcd_Palette[14] = 0b1010101111111111;
+    lcd_Palette[15] = 0b1111111111111111; //(end of LCD Palette)
+
+    memset(lcd_Ram, 0, LCD_SIZE / 4);
+
+
     const usb_standard_descriptors_t *desc = srl_GetCDCStandardDescriptors();
     /* Initialize the USB driver with our event handler and the serial device descriptors */
     usb_error_t usb_error = usb_Init(handle_usb_event, NULL, desc, USB_DEFAULT_INIT_FLAGS);
@@ -140,6 +167,7 @@ int end() {
             exit_Code = 1;
         }
     }
+    lcd_Control = lcdregisters; // Restore LCD Register (unfuck display)
     return exit_Code;
 }
 
@@ -229,60 +257,50 @@ bool step() {
 }
 
 int renderTile(int indx) {
-    int tileY = indx / 40;
-    int tileX = indx - ( 40 * tileY );
+    unsigned int tileY = indx / 40;
+    unsigned int tileX = indx - ( 40 * tileY );
     uint16_t tileData = renderGoal[indx];
     uint8_t symbol = (uint8_t)((tileData & 0xFF00) >> 8);
     uint8_t colour = (uint8_t)(tileData & 0x00FF);
     uint8_t fgColour = 0x00;
     uint8_t bgColour = 0x00;
-    if (colour & 0b10000000) {
-        fgColour |= colour_gray;
-    }
-    if (colour & 0b00001000) {
-        bgColour |= colour_gray;
-    }
-    if (colour & 0b01000000) {
-        fgColour |= colour_red;
-    }
-    if (colour & 0b00000100) {
-        bgColour |= colour_red;
-    }
-    if (colour & 0b00100000) {
-        fgColour |= colour_green;
-    }
-    if (colour & 0b00000010) {
-        bgColour |= colour_green;
-    }
-    if (colour & 0b00010000) {
-        fgColour |= colour_blue;
-    }
-    if (colour & 0b00000001) {
-        bgColour |= colour_blue;
-    }
+    bgColour = colour & 0x0F;
+    fgColour = (colour & 0xF0) >> 4;
     uint8_t pixelX = 0;
     uint8_t pixelY = 0;
-    uint8_t rowData;
+    uint32_t tile[8];
+    unsigned long row;
+    unsigned char rowData;
+    uint32_t pixel;
+    int bit;
     while (pixelY < 8) {
         if (canUseFont) {
             rowData = fontBytes[(8*symbol)+pixelY];
         } else {
             rowData = symbol;
         }
+        row = 0;
+
         pixelX = 0;
+        pixel = 0;
         while (pixelX < 8) {
-            bool pixelState = rowData & (1 << (7-pixelX));
-            uint8_t pixelColour;
-            if (pixelState) {
-                pixelColour = fgColour;
-            } else {
-                pixelColour = bgColour;
-            }
-            gfx_SetColor(pixelColour);
-            gfx_SetPixel(((8 * tileX)+pixelX),((8 * tileY)+pixelY));
-            pixelX += 1;
+            bit = ((rowData >> (7-pixelX)) & 1);
+            pixel = bit ? fgColour : bgColour;
+            row |= (pixel << (4 * pixelX));
+            pixelX++;
         }
+
+
+
+
+        tile[pixelY] = row;
         pixelY += 1;
+    }
+    pixelY = 0;
+    
+    while (pixelY < 8) {
+        vram[tileX + 40 * (pixelY + (8 * tileY))] = tile[pixelY];
+        pixelY++;
     }
     return 0;
 }
@@ -293,7 +311,7 @@ int draw() {
     if (newTiles == false) {
         return 0;
     }
-    while (renderedNow < 10) {
+    while (renderedNow < 160) {
         if (renderCurrent[drawIdx] != renderGoal[drawIdx]) {
             exit_Code = renderTile(drawIdx);
             renderCurrent[drawIdx] = renderGoal[drawIdx];
@@ -316,18 +334,13 @@ int main() {
     if (exit_Code != 0 ) {
         return exit_Code;
     }
-    gfx_Begin();
-    gfx_ZeroScreen();
-    gfx_SetDrawScreen();
 
     while (step()) { // No rendering allowed in step!
         exit_Code = draw(); // As little non-rendering logic as possible
         if (exit_Code != 0 ) {
-            gfx_End();
+            end();
             return exit_Code;
         }
     }
-
-    gfx_End();
     return end();
 }
