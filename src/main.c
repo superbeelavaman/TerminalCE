@@ -21,7 +21,7 @@ srl_device_t srl;
 
 bool has_srl_device = false;
 
-uint8_t srl_buf[512];
+uint8_t srl_buf[1024];
 
 long* vram = (long*)lcd_Ram;
 
@@ -96,9 +96,9 @@ uint8_t colour_gray  = 0b1000;
 
 uint8_t keyboardState = 0x00;
 
-bool newTiles = true;
+int scrollAmount = 0;
 
-const char* keyactions[1024];
+bool newTiles = true;
 
 long lcdregisters;
 
@@ -157,7 +157,8 @@ int begin() {
 void scroll() {
     memcpy(renderGoal+80, renderGoal+120, 2000);
     memset(renderGoal+1080, 0, 80);
-    newTiles = true;
+    scrollAmount++;
+    cursorY -= 1;
 }
 
 int end() {
@@ -174,23 +175,22 @@ int end() {
 bool step() {
     usb_HandleEvents();
     if(has_srl_device) {
-        char in_buf[64];
-        /* Read up to 64 bytes from the serial buffer */
+        char in_buf[1024];
+        /* Read up to 1024 bytes from the serial buffer */
         size_t bytes_read = srl_Read(&srl, in_buf, sizeof in_buf);
-
+        idx = 0;
+        char symbol;
+        char escape_code[16];
+        bool bs = false;
         /* Check for an error (e.g. device disconneced) */
         if(bytes_read < 0) {
             dbg_printf("error %d on srl_Read\n", bytes_read);
             has_srl_device = false;
         } else if(bytes_read > 0) {
-            idx = 0;
-            char symbol;
-            char escape_code[16];
-            bool bs = false;
             while (idx < bytes_read) {
                 symbol = in_buf[idx];
                 int increment_X = 1;
-                if (symbol == 0x27)
+                if (symbol == 0x27) {};
                 if (symbol == 0x7F) {
                     symbol = 0x20;
                     cursorX -= (cursorX>0);
@@ -220,9 +220,8 @@ bool step() {
                 }
                 if (cursorY > 25) {
                     scroll();
-                    cursorY = 25;
                 }
-                renderGoal[((40 * (cursorY+2)) + cursorX)] = (256*symbol+0xF0);
+                renderGoal[(40 * (cursorY+2)) + cursorX] = ((symbol << 8)|0xF0);
                 if (!bs) {
                     cursorX += increment_X;
                 }
@@ -230,6 +229,7 @@ bool step() {
             }
             newTiles = true;
         }
+        /*
         kb_Scan();
         idx8 = 0;
         idx  = 0;
@@ -249,9 +249,9 @@ bool step() {
             }
             idx += 1;
         }
-	if (send[0] != 0) {
-        	srl_Write(&srl, send, 1);
-	}
+	    if (send[0] != 0) {
+            	srl_Write(&srl, send, 1);
+	    }*/
     }
     return !kb_On;
 }
@@ -260,12 +260,10 @@ int renderTile(int indx) {
     unsigned int tileY = indx / 40;
     unsigned int tileX = indx - ( 40 * tileY );
     uint16_t tileData = renderGoal[indx];
-    uint8_t symbol = (uint8_t)((tileData & 0xFF00) >> 8);
+    uint8_t symbol1 = (uint8_t)((tileData & 0xFF00) >> 8);
     uint8_t colour = (uint8_t)(tileData & 0x00FF);
-    uint8_t fgColour = 0x00;
-    uint8_t bgColour = 0x00;
-    bgColour = colour & 0x0F;
-    fgColour = (colour & 0xF0) >> 4;
+    uint8_t bgColour = colour & 0x0F;
+    uint8_t fgColour = (colour & 0xF0) >> 4;
     uint8_t pixelX = 0;
     uint8_t pixelY = 0;
     uint32_t tile[8];
@@ -275,9 +273,9 @@ int renderTile(int indx) {
     int bit;
     while (pixelY < 8) {
         if (canUseFont) {
-            rowData = fontBytes[(8*symbol)+pixelY];
+            rowData = fontBytes[(8*symbol1)+pixelY];
         } else {
-            rowData = symbol;
+            rowData = symbol1;
         }
         row = 0;
 
@@ -305,13 +303,20 @@ int renderTile(int indx) {
     return 0;
 }
 
-int draw() {
+int draw(int maxTiles) {
+    while (scrollAmount > 0) {
+        memcpy(lcd_Ram+2560, lcd_Ram+3840, 32000);
+        memcpy(renderCurrent+80, renderCurrent+120, 2000);
+        memset(lcd_Ram+34560, 0, 1280);
+        scrollAmount--;
+    }
+
     int drawIdx = 0;
     int renderedNow = 0;
     if (newTiles == false) {
         return 0;
     }
-    while (renderedNow < 160) {
+    while (renderedNow < maxTiles) {
         if (renderCurrent[drawIdx] != renderGoal[drawIdx]) {
             exit_Code = renderTile(drawIdx);
             renderCurrent[drawIdx] = renderGoal[drawIdx];
@@ -321,7 +326,6 @@ int draw() {
             renderedNow += 1;
         }
         if (drawIdx > 1200) {
-            newTiles = false;
             return 0;
         }
         drawIdx += 1;
@@ -334,13 +338,16 @@ int main() {
     if (exit_Code != 0 ) {
         return exit_Code;
     }
-
+    uint8_t cycleCounter = 0;
     while (step()) { // No rendering allowed in step!
-        exit_Code = draw(); // As little non-rendering logic as possible
-        if (exit_Code != 0 ) {
-            end();
-            return exit_Code;
+        if (cycleCounter % 16 == 0) {
+            exit_Code = draw(1000); // As little non-rendering logic as possible
+            if (exit_Code != 0 ) {
+                end();
+                return exit_Code;
+            }
         }
+        cycleCounter++;
     }
     return end();
 }
