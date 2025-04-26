@@ -1,9 +1,11 @@
 #!/usr/bin/python
 from PIL import Image
-import struct
+import struct, sys
 
-tilesheetPNG = Image.open("TermFont.png")
-tilesheetBIN = open("TermFont.bin", "wb")
+print("[convert-fonttiles] converting file " + sys.argv[1] + " to binary file " + sys.argv[2])
+
+tilesheetPNG = Image.open(sys.argv[1])
+tilesheetBIN = open(sys.argv[2], "wb")
 tilesheetPixels = tilesheetPNG.load()
 
 tilesheetX, tilesheetY = tilesheetPNG.size
@@ -27,3 +29,5 @@ for y in range(0,vertTiles):
         generatedTileData += generateTile(x,y,tilesheetPixels)
         
 tilesheetBIN.write(bytearray(generatedTileData))
+
+print("[convert-fonttiles] conversion complete.")
