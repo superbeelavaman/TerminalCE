@@ -12,11 +12,15 @@ CXXFLAGS = -Wall -Wextra -Oz
 
 # ----------------------------
 
+all: build-font
+
 include $(shell cedev-config --makefile)
 
-FONTPACKNAME = termFont
+FONTPACKNAME = TermFont
 FONTDIR = $(SRCDIR)/gfx
-DEPS = $(BINDIR)/$(FONTPACKNAME).8xv
 
-$(BINDIR)/$(FONTPACKNAME).8xv: $(SRCDIR)/gfx/$(FONTPACKNAME).bin
-	$(Q)convbin --iformat bin --input $(SRCDIR)/gfx/$(FONTPACKNAME).bin --oformat 8xv --output $(BINDIR)/$(FONTPACKNAME).8xv --archive --name $(FONTPACKNAME)
+SHELL := /bin/bash
+
+build-font:
+	python3 scripts/convert-fonttiles.py $(FONTDIR)/$(FONTPACKNAME).png $(BINDIR)/$(FONTPACKNAME).bin
+	convbin --iformat bin --oformat 8xv --input $(BINDIR)/$(FONTPACKNAME).bin --output $(BINDIR)/$(FONTPACKNAME).8xv --name $(FONTPACKNAME)
