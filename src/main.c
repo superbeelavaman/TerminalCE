@@ -102,6 +102,12 @@ bool newTiles = true;
 
 long lcdregisters;
 
+char escape_code[256];
+bool parsing_escape = false;
+uint8_t escapeindex = 0;
+
+uint8_t renderColours = 0xF0;
+
 int begin() {
     kb_EnableOnLatch();
     kb_ClearOnLatch();
@@ -116,22 +122,23 @@ int begin() {
     lcdregisters = lcd_Control; // Save LCD Register
     lcd_Control = ((lcdregisters & 0xFFF1) | 0b0100); //Set 4bpp Mode
 
-    lcd_Palette[ 0] = 0b0000000000000000; //Set LCD Palette
-    lcd_Palette[ 1] = 0b0101010000000000;
-    lcd_Palette[ 2] = 0b0000001010100000;
-    lcd_Palette[ 3] = 0b0101011010100000;
-    lcd_Palette[ 4] = 0b0000000000010101;
-    lcd_Palette[ 5] = 0b0101010000010101;
-    lcd_Palette[ 6] = 0b0000001010110101;
-    lcd_Palette[ 7] = 0b0101011010110101;
-    lcd_Palette[ 8] = 0b1010100101001010;
-    lcd_Palette[ 9] = 0b1111110101001010;
-    lcd_Palette[10] = 0b1010101111101010;
-    lcd_Palette[11] = 0b1111111111101010;
-    lcd_Palette[12] = 0b1010100101011111;
-    lcd_Palette[13] = 0b1111110101011111;
-    lcd_Palette[14] = 0b1010101111111111;
-    lcd_Palette[15] = 0b1111111111111111; //(end of LCD Palette)
+    //Set LCD Palette
+    lcd_Palette[ 0] = 0b0000000000000000; //black
+    lcd_Palette[ 1] = 0b0101010000000000; //dark red
+    lcd_Palette[ 2] = 0b0000001010100000; //dark green
+    lcd_Palette[ 3] = 0b0101011010100000; //dark orange/brown
+    lcd_Palette[ 4] = 0b0000000000010101; //dark blue
+    lcd_Palette[ 5] = 0b0101010000010101; //purple/dark magenta
+    lcd_Palette[ 6] = 0b0000001010110101; //dark cyan
+    lcd_Palette[ 7] = 0b0101011010110101; //light gray
+    lcd_Palette[ 8] = 0b1010100101001010; //dark gray
+    lcd_Palette[ 9] = 0b1111110101001010; //light red
+    lcd_Palette[10] = 0b1010101111101010; //light green
+    lcd_Palette[11] = 0b1111111111101010; //light yellow
+    lcd_Palette[12] = 0b1010100101011111; //light blue
+    lcd_Palette[13] = 0b1111110101011111; //light magenta/pink
+    lcd_Palette[14] = 0b1010101111111111; //light cyan
+    lcd_Palette[15] = 0b1111111111111111; //white
 
     memset(lcd_Ram, 0, LCD_SIZE / 4);
 
@@ -172,6 +179,109 @@ int end() {
     return exit_Code;
 }
 
+void parseescapecode(uint8_t type) {
+    if (type == 1) {
+        uint8_t i = 0;
+        uint8_t seperatorpos = 0;
+        while (i < escapeindex) {
+            if (escape_code[i] == ";"[0]) {
+                seperatorpos = i;
+                break;
+            }
+            i++;
+            if (i > 250) {
+                end();
+                exit(255);
+            }
+        }
+        if ((seperatorpos == 0) && (escapeindex == 3) && (escape_code[2] == "0"[0])) {
+            renderColours = 0xF0;
+            return;
+        }
+        bool bg = false;
+        uint8_t numlastdigit = 3;
+        bool light = false;
+        if (seperatorpos != 0) {
+            if (seperatorpos == 5) {
+                bg = true;
+                numlastdigit = 4;
+                light = true;
+            } else {
+                if (escape_code[2] == "4"[0]) {
+                    bg = true;
+                }
+                if (escape_code[2] == "9"[0]) {
+                    light = true;
+                }
+            }
+        } else {
+            if (escapeindex == 4) {
+                bg = true;
+                numlastdigit = 4;
+                light = true;
+            } else {
+                if (escape_code[2] == "4"[0]) {
+                    bg = true;
+                }
+                if (escape_code[2] == "9"[0]) {
+                    light = true;
+                }
+            }
+        }
+        i = 0;
+        while (i < 8) {
+            if (escape_code[numlastdigit] == 48+i) {
+                break;
+            }
+            i++;
+        }
+        if (!bg) {
+            renderColours &= 0xF0;
+            renderColours |= (0x08 * light);
+            renderColours |= i;
+        } else {
+            renderColours &= 0x0F;
+            renderColours |= (0x80 * light);
+            renderColours |= ((uint16_t)i << 8);
+        }
+
+        if (seperatorpos != 0) {
+            bg = false;
+            numlastdigit = seperatorpos + 2;
+            light = false;
+
+            if (escapeindex == seperatorpos + 4) {
+                bg = true;
+                numlastdigit = seperatorpos + 3;
+                light = true;
+            } else {
+                if (escape_code[seperatorpos + 1] == "4"[0]) {
+                    bg = true;
+                }
+                if (escape_code[seperatorpos + 1] == "9"[0]) {
+                    light = true;
+                }
+            }
+            i = 0;
+            while (i < 8) {
+                if (escape_code[numlastdigit] == 0x30+i) {
+                    break;
+                }
+                i++;
+            }
+            if (bg) {
+                renderColours &= 0xF0;
+                renderColours |= (0x08 * light);
+                renderColours |= i;
+            } else {
+                renderColours &= 0x0F;
+                renderColours |= (0x80 * light);
+                renderColours |= ((uint16_t)i << 8);
+            }
+        }
+    }
+}
+
 bool step() {
     usb_HandleEvents();
     if(has_srl_device) {
@@ -180,7 +290,6 @@ bool step() {
         size_t bytes_read = srl_Read(&srl, in_buf, sizeof in_buf);
         idx = 0;
         char symbol;
-        char escape_code[16];
         bool bs = false;
         /* Check for an error (e.g. device disconneced) */
         if(bytes_read < 0) {
@@ -189,41 +298,76 @@ bool step() {
         } else if(bytes_read > 0) {
             while (idx < bytes_read) {
                 symbol = in_buf[idx];
-                int increment_X = 1;
-                if (symbol == 0x27) {};
-                if (symbol == 0x7F) {
-                    symbol = 0x20;
-                    cursorX -= (cursorX>0);
-                    increment_X = 0;
+
+                if (symbol == 0x1B) {
+                    parsing_escape = true;
+                    escapeindex = 0;
                 }
-                if (symbol == 0x0D) {
-                    cursorX = 0;
-                    cursorY += 1;
-                    symbol = 0x20;
-                    increment_X = 0;
-                }
-                if (symbol == 0x05) {
-                    srl_Write(&srl, "TerminalCE", 10);
-                    increment_X = 0;
-                    symbol = 0x20;
-                }
-                if (symbol == 0x08) {
-                    if (cursorX != 0) {
-                        cursorX -= 1;
+
+                if (parsing_escape) {
+                    escape_code[escapeindex] = symbol;
+                    if ((escapeindex == 1) && (symbol != "["[0])) {
+                        parsing_escape = false;
+                        idx = 0;
                     }
-                    symbol = 0x20;
-                    bs = true;
-                }
-                if (cursorX >= 40) {
-                    cursorX = 0;
-                    cursorY += 1;
-                }
-                if (cursorY > 25) {
-                    scroll();
-                }
-                renderGoal[(40 * (cursorY+2)) + cursorX] = ((symbol << 8)|0xF0);
-                if (!bs) {
-                    cursorX += increment_X;
+                    if (escapeindex > 1) {
+                        if (symbol == "m"[0]) {
+                            parseescapecode(1);
+                            parsing_escape = false;
+
+                        } else if ((symbol >= 0x40) && (symbol <= 0x5F)) {
+                            parsing_escape = false;
+                        }
+                    }
+                    if (symbol == 0x0D) {
+                        parsing_escape = false;
+                        idx = 0;
+                    } 
+                    escapeindex++;
+                } else {
+                    int increment_X = 1;
+                    if (symbol == 0x0D) {
+                        cursorX = 0;
+                        symbol = 0x00;
+                        increment_X = 0;
+                    }
+                    if (symbol == 0x0A) {
+                        cursorY += 1;
+                        symbol = 0x00;
+                        increment_X = 0;
+                    }
+                    if (symbol == 0x0C) {
+                        memset(renderGoal+80, 0, 2000);
+                        scrollAmount += 24;
+                        cursorY = 0;
+                        symbol = 0x00;
+                        increment_X = 0;
+                    } 
+                    if (symbol == 0x05) {
+                        srl_Write(&srl, "TerminalCE", 10);
+                        increment_X = 0;
+                        symbol = 0x00;
+                    }
+                    if ((symbol == 0x08) | (symbol)) {
+                        if (cursorX != 0) {
+                            cursorX -= 1;
+                        }
+                        symbol = 0x20;
+                        bs = true;
+                    }
+                    if (cursorX >= 40) {
+                        cursorX = 0;
+                        cursorY += 1;
+                    }
+                    if (cursorY > 25) {
+                        scroll();
+                    }
+                    if (symbol != 0x00) {
+                        renderGoal[(40 * (cursorY+2)) + cursorX] = ((symbol << 8)|renderColours);
+                    }
+                    if (!bs) {
+                        cursorX += increment_X;
+                    }
                 }
                 idx += 1;
             }
@@ -340,7 +484,7 @@ int main() {
     }
     uint8_t cycleCounter = 0;
     while (step()) { // No rendering allowed in step!
-        if (cycleCounter % 16 == 0) {
+        if (cycleCounter % 8 == 0) {
             exit_Code = draw(1000); // As little non-rendering logic as possible
             if (exit_Code != 0 ) {
                 end();
