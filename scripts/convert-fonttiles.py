@@ -18,7 +18,11 @@ def generateTile(x,y,image):
     for py in range(0,8):
         row = []
         for px in range(0,8):
-            r,g,b,a = image[(8*x)+px,(8*y)+py]
+            pixelvalues = image[(8*x)+px,(8*y)+py]
+            try:
+                r,g,b,a = pixelvalues
+            except ValueError:
+                r,g,b = pixelvalues
             row.append(((r+g+b)>384))
         tile.append(sum([int(row[b])*(2**(7-b)) for b in range(0,8)]))
     return tile
