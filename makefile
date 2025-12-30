@@ -22,5 +22,6 @@ FONTDIR = $(SRCDIR)/gfx
 SHELL := /bin/bash
 
 build-font:
+	mkdir $(BINDIR)
 	python3 scripts/convert-fonttiles.py $(FONTDIR)/$(FONTPACKNAME).png $(BINDIR)/$(FONTPACKNAME).bin
 	convbin --iformat bin --oformat 8xv --input $(BINDIR)/$(FONTPACKNAME).bin --output $(BINDIR)/$(FONTPACKNAME).8xv --name $(FONTPACKNAME)
