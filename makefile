@@ -2,9 +2,9 @@
 # Makefile Options
 # ----------------------------
 
-NAME = DEMO
+NAME = TERMCE
 ICON = icon.png
-DESCRIPTION = "CE C Toolchain Demo"
+DESCRIPTION = "Serial Terminal for CE"
 COMPRESSED = NO
 
 CFLAGS = -Wall -Wextra -Oz
